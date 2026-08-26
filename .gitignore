@@ -1,0 +1,7 @@
+.env
+.venv/
+data/*.db
+reports/*.md
+reports/*.html
+__pycache__/
+*.pyc

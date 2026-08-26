@@ -1,0 +1,44 @@
+# Steam-inspired dark theme: deep navy ground, the familiar cyan accent,
+# and the acid-green Steam uses for discounts.
+[theme]
+base = "dark"
+primaryColor = "#66c0f4"
+backgroundColor = "#1b2838"
+secondaryBackgroundColor = "#213347"
+codeBackgroundColor = "#171a21"
+textColor = "#c7d5e0"
+linkColor = "#66c0f4"
+borderColor = "#2f4560"
+showWidgetBorder = true
+showSidebarBorder = true
+baseRadius = "8px"
+buttonRadius = "8px"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+codeFontSize = "13px"
+codeTextColor = "#c7d5e0"
+baseFontSize = 15
+baseFontWeight = 400
+headingFontSizes = ["34px", "23px", "18px", "16px", "14px", "13px"]
+headingFontWeights = [700, 600, 600, 500, 500, 500]
+linkUnderline = false
+dataframeBorderColor = "#2f4560"
+dataframeHeaderBackgroundColor = "#213347"
+
+greenColor = "#a4d007"
+blueColor = "#66c0f4"
+orangeColor = "#e8a33d"
+redColor = "#e05c5c"
+violetColor = "#a67ddb"
+yellowColor = "#e5c07b"
+grayColor = "#8f98a0"
+
+chartCategoricalColors = ["#66c0f4", "#a4d007", "#e8a33d", "#a67ddb", "#e05c5c", "#5bc0be", "#8f98a0"]
+chartSequentialColors = ["#0e1620", "#152232", "#1b2838", "#213347", "#2f4560", "#3d5a7a", "#4d7599", "#5f92b8", "#66c0f4", "#9ad6f8"]
+
+[theme.sidebar]
+backgroundColor = "#171a21"
+secondaryBackgroundColor = "#1b2838"
+codeBackgroundColor = "#12151a"
+borderColor = "#2f4560"

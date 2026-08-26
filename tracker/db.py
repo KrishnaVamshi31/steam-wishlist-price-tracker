@@ -1,0 +1,209 @@
+"""SQLite storage for games, price history, alerts and sale research notes."""
+import sqlite3
+from contextlib import contextmanager
+from datetime import datetime, timezone
+
+from . import config
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS games (
+    appid           INTEGER PRIMARY KEY,
+    name            TEXT,
+    type            TEXT,
+    publishers      TEXT,
+    developers      TEXT,
+    release_date    TEXT,
+    coming_soon     INTEGER DEFAULT 0,
+    is_free         INTEGER DEFAULT 0,
+    on_wishlist     INTEGER DEFAULT 1,
+    first_seen      TEXT,
+    last_seen       TEXT
+);
+
+CREATE TABLE IF NOT EXISTS price_history (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    appid            INTEGER NOT NULL,
+    ts               TEXT NOT NULL,
+    initial          INTEGER,          -- paise
+    final            INTEGER,          -- paise
+    discount_percent INTEGER,
+    currency         TEXT,
+    FOREIGN KEY (appid) REFERENCES games(appid)
+);
+CREATE INDEX IF NOT EXISTS idx_price_appid_ts ON price_history(appid, ts);
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    appid    INTEGER,
+    ts       TEXT NOT NULL,
+    kind     TEXT,                     -- discount | record_low | target_hit | free
+    title    TEXT,
+    body     TEXT,
+    notified INTEGER DEFAULT 0
+);
+
+-- Sale intel gathered from the web (upcoming Steam sales, publisher sales, etc.)
+CREATE TABLE IF NOT EXISTS notes (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    appid    INTEGER,                  -- NULL = applies to everything
+    ts       TEXT NOT NULL,
+    source   TEXT,
+    headline TEXT,
+    url      TEXT,
+    body     TEXT,
+    starts   TEXT,                     -- ISO date if a sale date is known
+    ends     TEXT
+);
+
+-- Price history imported from IsThereAnyDeal, kept apart from our own
+-- observations so a refresh can replace it wholesale without touching them.
+CREATE TABLE IF NOT EXISTS itad_history (
+    appid    INTEGER NOT NULL,
+    ts       TEXT NOT NULL,
+    price    INTEGER,
+    regular  INTEGER,
+    cut      INTEGER,
+    PRIMARY KEY (appid, ts, price, cut)
+);
+CREATE INDEX IF NOT EXISTS idx_itad_appid ON itad_history(appid, ts);
+
+CREATE TABLE IF NOT EXISTS itad_meta (
+    appid      INTEGER PRIMARY KEY,
+    uuid       TEXT,
+    fetched_at TEXT,
+    points     INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+"""
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+@contextmanager
+def connect():
+    config.DATA_DIR.mkdir(exist_ok=True)
+    conn = sqlite3.connect(config.DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.executescript(SCHEMA)
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def upsert_game(conn, appid: int, meta: dict, on_wishlist: bool = True) -> None:
+    ts = now()
+    conn.execute(
+        """
+        INSERT INTO games (appid, name, type, publishers, developers, release_date,
+                           coming_soon, is_free, on_wishlist, first_seen, last_seen)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(appid) DO UPDATE SET
+            name         = COALESCE(excluded.name, games.name),
+            type         = COALESCE(excluded.type, games.type),
+            publishers   = COALESCE(excluded.publishers, games.publishers),
+            developers   = COALESCE(excluded.developers, games.developers),
+            release_date = COALESCE(excluded.release_date, games.release_date),
+            coming_soon  = excluded.coming_soon,
+            is_free      = excluded.is_free,
+            on_wishlist  = excluded.on_wishlist,
+            last_seen    = excluded.last_seen
+        """,
+        (
+            appid,
+            meta.get("name"),
+            meta.get("type"),
+            ", ".join(meta.get("publishers") or []),
+            ", ".join(meta.get("developers") or []),
+            meta.get("release_date"),
+            int(bool(meta.get("coming_soon"))),
+            int(bool(meta.get("is_free"))),
+            int(on_wishlist),
+            ts,
+            ts,
+        ),
+    )
+
+
+def last_price(conn, appid: int):
+    return conn.execute(
+        "SELECT * FROM price_history WHERE appid=? ORDER BY ts DESC LIMIT 1", (appid,)
+    ).fetchone()
+
+
+def record_low(conn, appid: int):
+    """Lowest final price we have ever recorded for this app."""
+    return conn.execute(
+        "SELECT MIN(final) AS low FROM price_history WHERE appid=? AND final IS NOT NULL",
+        (appid,),
+    ).fetchone()["low"]
+
+
+def add_price(conn, appid: int, price: dict) -> bool:
+    """Insert a price row only when it differs from the last one. Returns True if changed."""
+    prev = last_price(conn, appid)
+    changed = (
+        prev is None
+        or prev["final"] != price["final"]
+        or prev["discount_percent"] != price["discount_percent"]
+    )
+    if changed:
+        conn.execute(
+            "INSERT INTO price_history (appid, ts, initial, final, discount_percent, currency)"
+            " VALUES (?,?,?,?,?,?)",
+            (
+                appid,
+                now(),
+                price.get("initial"),
+                price.get("final"),
+                price.get("discount_percent"),
+                price.get("currency"),
+            ),
+        )
+    return changed
+
+
+def add_alert(conn, appid, kind: str, title: str, body: str) -> int:
+    cur = conn.execute(
+        "INSERT INTO alerts (appid, ts, kind, title, body) VALUES (?,?,?,?,?)",
+        (appid, now(), kind, title, body),
+    )
+    return cur.lastrowid
+
+
+def mark_notified(conn, alert_ids) -> None:
+    conn.executemany(
+        "UPDATE alerts SET notified=1 WHERE id=?", [(i,) for i in alert_ids]
+    )
+
+
+def add_note(conn, headline, body, source="", url="", appid=None, starts=None, ends=None) -> None:
+    """Store a piece of sale intel. Skips exact duplicate headlines for the same app."""
+    dupe = conn.execute(
+        "SELECT 1 FROM notes WHERE headline=? AND IFNULL(appid,-1)=IFNULL(?,-1)",
+        (headline, appid),
+    ).fetchone()
+    if dupe:
+        return
+    conn.execute(
+        "INSERT INTO notes (appid, ts, source, headline, url, body, starts, ends)"
+        " VALUES (?,?,?,?,?,?,?,?)",
+        (appid, now(), source, headline, url, body, starts, ends),
+    )
+
+
+def set_meta(conn, key: str, value: str) -> None:
+    conn.execute(
+        "INSERT INTO meta (key,value) VALUES (?,?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (key, str(value)),
+    )
+
+
+def get_meta(conn, key: str, default=None):
+    row = conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else default

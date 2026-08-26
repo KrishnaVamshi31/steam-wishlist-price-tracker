@@ -1,0 +1,6 @@
+requests>=2.31
+python-dotenv>=1.0
+rich>=13.0
+streamlit>=1.57
+win11toast>=0.35
+anthropic>=1.0

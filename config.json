@@ -1,0 +1,15 @@
+{
+  "steam_profile": "https://steamcommunity.com/profiles/76561199431161697/",
+  "country_code": "in",
+  "currency_symbol": "\u20b9",
+  "min_discount_percent": 20,
+  "alert_on_record_low": true,
+  "record_low_min_discount": 10,
+  "record_low_min_history": 3,
+  "target_prices": {},
+  "extra_appids": [],
+  "notify": {
+    "telegram": true,
+    "toast": false
+  }
+}
