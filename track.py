@@ -7,11 +7,12 @@
   python track.py test       verify Telegram + toast notifications work
   python track.py note       record a piece of sale intel (used by the research task)
   python track.py backup     snapshot data/prices.db to data/backups/
+  python track.py research   search the web for sale news and record it
 """
 import argparse
 import sys
 
-from tracker import check, config, console, db, insight, itad, notify, report, steam
+from tracker import check, config, console, db, insight, itad, notify, report, research, steam
 
 console.init()
 
@@ -206,6 +207,21 @@ def cmd_note(args):
     print("Note recorded.")
 
 
+def cmd_research(args):
+    """Search the web for sale news and record it (used by the daily automation)."""
+    if not research.configured():
+        print("No ANTHROPIC_API_KEY in .env — skipping web research.")
+        return
+    print("Researching sale news...")
+    summary = research.run_and_notify() if args.telegram else research.run()
+    if not summary:
+        print("Nothing new worth recording.")
+        return
+    print(summary)
+    if args.telegram and notify.telegram_configured():
+        print("Sent to Telegram.")
+
+
 def cmd_backup(args):
     path = db.backup()
     if path:
@@ -236,6 +252,10 @@ def main():
     sub.add_parser("test", help="test notification channels").set_defaults(fn=cmd_test)
     sub.add_parser("whoami", help="check Steam profile + wishlist visibility").set_defaults(fn=cmd_whoami)
     sub.add_parser("backup", help="snapshot the database to data/backups/").set_defaults(fn=cmd_backup)
+
+    r = sub.add_parser("research", help="search the web for sale news and record it")
+    r.add_argument("--telegram", action="store_true", help="also send the summary to Telegram")
+    r.set_defaults(fn=cmd_research)
 
     a = sub.add_parser("advise", help="buy-now-or-wait verdicts")
     a.add_argument("--telegram", action="store_true", help="also send verdicts to Telegram")

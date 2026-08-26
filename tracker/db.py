@@ -98,6 +98,15 @@ def connect():
         yield conn
         conn.commit()
     finally:
+        # Fold the WAL back into prices.db and truncate it, so the .db file on disk
+        # is always self-contained. Without this, a raw file copy or `git add` of
+        # prices.db alone (as the daily workflow does) could miss whatever's still
+        # sitting only in the WAL — SQLite's own auto-checkpoint isn't guaranteed to
+        # have run yet, and TRUNCATE also keeps the -wal file from growing unbounded.
+        try:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except sqlite3.Error:
+            pass
         conn.close()
 
 

@@ -1,7 +1,13 @@
+# prices.db is intentionally NOT ignored: the daily GitHub Actions workflow commits
+# it back to the repo so price history persists across runs (a cloud runner has no
+# disk of its own between fires — git is the only thing that survives). Local
+# backups still are, they're a separate desktop-only safety net.
 .env
 .venv/
-data/*.db
 data/backups/
+data/*.db-shm
+data/*.db-wal
+data/*.db-journal
 reports/*.md
 reports/*.html
 __pycache__/

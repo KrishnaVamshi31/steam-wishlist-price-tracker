@@ -80,6 +80,7 @@ Two pages: **Overview** and **Settings**.
 | `python track.py test` | Verify Telegram and desktop notifications |
 | `python track.py whoami` | Check profile resolution and wishlist visibility |
 | `python track.py note "..."` | Record sale intel (used by the daily research task) |
+| `python track.py research` | Web-search for sale news and record it (`--telegram` to also send a summary) |
 | `python track.py backup` | Snapshot `data/prices.db` to `data/backups/` (also runs automatically, once a day, inside `check`) |
 
 ## Ask (chat)
@@ -149,10 +150,32 @@ every day; a deeper cut will.
 
 ## The daily automated check
 
-`DAILY_TASK.md` is the prompt for a scheduled Claude task that runs the price check,
-searches the web for upcoming sale news, records what it finds, and messages you only
-when something is worth acting on. Price tracking is deterministic Python; the sale
-research and the buy-now-vs-wait judgment are the parts that need a model.
+`.github/workflows/daily.yml` runs the whole pipeline once a day on GitHub's own
+infrastructure — `check` → `advise` → `research` — with no dependency on any machine
+being turned on. `DAILY_TASK.md` is the original version of this as a prompt for a
+live Claude Code session; the workflow is the same steps automated with GitHub
+Secrets standing in for `.env`.
+
+**To turn it on**, add these as repository secrets (Settings → Secrets and variables
+→ Actions), or run `gh secret set --env-file .env` from the project root once your
+local `.env` is filled in:
+
+| Secret | Enables |
+|---|---|
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | The bot actually messaging you — nothing sends without these |
+| `ANTHROPIC_API_KEY` | The web-research step (`tracker/research.py`) |
+| `ITAD_API_KEY` | Full discount history per game, back to release, imported daily |
+
+Until those secrets exist, the workflow still runs and updates `data/prices.db` —
+each step degrades gracefully and just skips itself, the same way it does locally
+when a key is missing from `.env`.
+
+**Trade-off to know about:** the workflow commits `data/prices.db` back to the repo
+after every run, since a GitHub-hosted runner has no disk of its own between fires —
+git is what makes the price history persist. That means your *local* copy goes stale
+the moment the cloud workflow starts running. `git pull` before opening the dashboard
+locally to see the latest cloud-gathered data, and `git push` after a local
+`track.py check` if you want it to stick.
 
 ## How it works
 
