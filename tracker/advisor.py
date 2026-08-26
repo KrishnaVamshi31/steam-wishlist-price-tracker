@@ -128,6 +128,26 @@ def _confidence(episode_count: int, span: int) -> str:
     return "low"
 
 
+def _thin_data_caveat(
+    eps: list[Episode], span: int, upcoming: "salecalendar.SaleWindow | None", today: date
+) -> str | None:
+    """A "this might not actually be the floor" note for a BUY_NOW called on thin history.
+
+    Matching the best discount on record means nothing when the record is one or two
+    sales — it may just be the only discount this game has had a chance to show yet.
+    Flag it, but only when there is an actual upcoming sale to point to as a reason it
+    could still go lower; otherwise this is just noise on a game that plainly never
+    discounts further.
+    """
+    if len(eps) >= 2 or not upcoming or upcoming.days_until(today) > WAIT_HORIZON_DAYS:
+        return None
+    return (
+        f"Only {len(eps)} discount on record ({span} day{'s' if span != 1 else ''} of "
+        f"history), so this might not be the real floor. {salecalendar.describe(upcoming, today)} "
+        "— worth watching in case it goes deeper there."
+    )
+
+
 def analyse(
     history: list[PricePoint],
     current: PricePoint,
@@ -209,6 +229,9 @@ def analyse(
             f"{current.cut}% {'beats' if beats else 'matches'} the deepest discount "
             f"on record ({verdict.best_cut}%) across {len(eps)} past sale(s)."
         )
+        caveat = _thin_data_caveat(eps, span, upcoming, today)
+        if caveat:
+            verdict.reasons.append(caveat)
         return verdict
 
     # --- a game that simply does not discount ---------------------------------
@@ -264,6 +287,9 @@ def analyse(
             f"{current.cut}% is in line with the typical {expected_cut}% discount "
             f"across {len(eps)} past sale(s)."
         )
+        caveat = _thin_data_caveat(eps, span, upcoming, today)
+        if caveat:
+            verdict.reasons.append(caveat)
         return verdict
 
     # --- no sale near, and the game is overdue one ----------------------------

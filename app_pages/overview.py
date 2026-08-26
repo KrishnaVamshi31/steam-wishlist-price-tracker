@@ -81,22 +81,6 @@ def load_verdicts() -> list[dict]:
 
 
 @st.cache_data(ttl=60)
-def wishlist_value_trend() -> list[float]:
-    """Total cost of the wishlist over time — the sparkline under the headline metric."""
-    with db.connect() as conn:
-        rows = conn.execute(
-            "SELECT appid, ts, final FROM price_history ORDER BY ts"
-        ).fetchall()
-    if not rows:
-        return []
-    frame = pd.DataFrame([dict(r) for r in rows])
-    frame["day"] = pd.to_datetime(frame["ts"], format="ISO8601").dt.date
-    latest = frame.sort_values("ts").groupby(["day", "appid"], as_index=False).last()
-    totals = latest.groupby("day")["final"].sum() / 100
-    return [float(v) for v in totals.tail(30)]
-
-
-@st.cache_data(ttl=60)
 def meta() -> dict:
     with db.connect() as conn:
         return {"last_run": db.get_meta(conn, "last_run", "never")}
@@ -152,7 +136,9 @@ on_sale = games[games["discount_percent"] > 0]
 total_now = games["final"].fillna(0).sum()
 total_full = games["initial"].fillna(games["final"]).fillna(0).sum()
 saving = total_full - total_now
-trend = wishlist_value_trend()
+verdicts = load_verdicts()
+buy_now = [v for v in verdicts if v["action"] == "BUY_NOW"]
+buy_now_cost = sum(v["price"] or 0 for v in buy_now)
 
 st.title("Wishlist price tracker")
 
@@ -176,11 +162,11 @@ with st.container(horizontal=True):
         border=True,
     )
     st.metric(
-        "Cost to buy all",
-        money(total_now),
+        "Worth buying now",
+        money(buy_now_cost) if buy_now else "—",
+        f"{len(buy_now)} game{'s' if len(buy_now) != 1 else ''}" if buy_now else "nothing yet",
         border=True,
-        chart_data=trend if len(trend) > 1 else None,
-        chart_type="line",
+        help="What today's BUY_NOW picks would cost — not the whole wishlist at once.",
     )
     st.metric(
         "Saved vs full price",
@@ -190,7 +176,6 @@ with st.container(horizontal=True):
     )
 
 # ------------------------------------------------------------------ verdicts
-verdicts = load_verdicts()
 actionable = [v for v in verdicts if v["action"] in ("BUY_NOW", "WAIT")]
 
 st.subheader("Buy now or wait?")

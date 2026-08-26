@@ -52,18 +52,24 @@ def lookup_uuid(appid: int) -> str | None:
 def history(
     uuid: str,
     country: str = "IN",
+    since: date | None = None,
     years: int = 4,
     steam_only: bool = True,
 ) -> list[PricePoint]:
     """Price-change history for one game, newest-safe and Steam-filtered.
 
-    ITAD defaults to the last 3 months, so `since` must be passed explicitly to
-    get anything the cadence model can actually learn from.
+    ITAD defaults to the last 3 months, so a start date must be passed explicitly to
+    get anything the cadence model can actually learn from. Pass the game's release
+    date as `since` to pull its entire discount history back to launch; `years` is
+    only the fallback for when the release date isn't known.
     """
-    since = (datetime.now() - timedelta(days=365 * years)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    since_dt = datetime.combine(since, datetime.min.time()) if since else (
+        datetime.now() - timedelta(days=365 * years)
+    )
+    since_str = since_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     r = requests.get(
         f"{BASE}/games/history/v2",
-        params={"key": _key(), "id": uuid, "country": country, "since": since},
+        params={"key": _key(), "id": uuid, "country": country, "since": since_str},
         timeout=TIMEOUT,
     )
     if r.status_code != 200:
@@ -95,12 +101,14 @@ def history(
     return sorted(points, key=lambda p: p.ts)
 
 
-def history_for_appid(appid: int, country: str = "IN", years: int = 4) -> list[PricePoint]:
+def history_for_appid(
+    appid: int, country: str = "IN", since: date | None = None, years: int = 4
+) -> list[PricePoint]:
     """Convenience: appid straight to price history. Returns [] when unavailable."""
     try:
         uuid = lookup_uuid(appid)
         if not uuid:
             return []
-        return history(uuid, country=country, years=years)
+        return history(uuid, country=country, since=since, years=years)
     except (ITADError, requests.RequestException, ValueError):
         return []

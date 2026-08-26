@@ -73,8 +73,10 @@ def itad_is_stale(conn, appid: int) -> bool:
 
 
 def refresh_itad(conn, appid: int, country: str = "IN") -> int:
-    """Import ITAD history for one game. Returns the number of points stored."""
-    points = itad.history_for_appid(appid, country=country)
+    """Import ITAD history for one game, back to its release. Returns points stored."""
+    row = conn.execute("SELECT release_date FROM games WHERE appid=?", (appid,)).fetchone()
+    release = _release_date(row) if row else None
+    points = itad.history_for_appid(appid, country=country, since=release)
     if points:
         conn.execute("DELETE FROM itad_history WHERE appid=?", (appid,))
         conn.executemany(
