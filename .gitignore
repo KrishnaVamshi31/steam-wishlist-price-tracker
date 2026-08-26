@@ -1,6 +1,7 @@
 .env
 .venv/
 data/*.db
+data/backups/
 reports/*.md
 reports/*.html
 __pycache__/

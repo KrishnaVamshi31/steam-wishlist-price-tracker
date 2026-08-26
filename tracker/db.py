@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 
 from . import config
 
+BACKUP_DIR = config.DATA_DIR / "backups"
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS games (
     appid           INTEGER PRIMARY KEY,
@@ -85,8 +87,12 @@ def now() -> str:
 @contextmanager
 def connect():
     config.DATA_DIR.mkdir(exist_ok=True)
-    conn = sqlite3.connect(config.DB_PATH)
+    conn = sqlite3.connect(config.DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+    # WAL lets the dashboard (reader) and `track.py check` (writer) run at the same
+    # time without "database is locked" — readers no longer block behind a writer.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
     try:
         conn.executescript(SCHEMA)
         yield conn
@@ -207,3 +213,35 @@ def set_meta(conn, key: str, value: str) -> None:
 def get_meta(conn, key: str, default=None):
     row = conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
     return row["value"] if row else default
+
+
+def backup(keep: int = 30):
+    """Copy prices.db to data/backups/, at most once per day, pruning old copies.
+
+    Price history isn't reconstructable if the DB is lost — it's this tracker's
+    own observations, gitignored by design. A WAL-mode DB can't just be copied as
+    a plain file while it might be mid-write, so this uses SQLite's own backup API
+    rather than shutil, which would risk grabbing a torn/inconsistent snapshot.
+    """
+    if not config.DB_PATH.exists():
+        return None
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    dest = BACKUP_DIR / f"prices-{datetime.now():%Y-%m-%d}.db"
+    created = False
+    if not dest.exists():
+        src = sqlite3.connect(config.DB_PATH)
+        try:
+            out = sqlite3.connect(dest)
+            try:
+                src.backup(out)
+            finally:
+                out.close()
+        finally:
+            src.close()
+        created = True
+
+    backups = sorted(BACKUP_DIR.glob("prices-*.db"))
+    for old in backups[:-keep]:
+        old.unlink(missing_ok=True)
+
+    return dest if created else None

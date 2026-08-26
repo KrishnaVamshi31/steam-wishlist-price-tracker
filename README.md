@@ -80,6 +80,7 @@ Two pages: **Overview** and **Settings**.
 | `python track.py test` | Verify Telegram and desktop notifications |
 | `python track.py whoami` | Check profile resolution and wishlist visibility |
 | `python track.py note "..."` | Record sale intel (used by the daily research task) |
+| `python track.py backup` | Snapshot `data/prices.db` to `data/backups/` (also runs automatically, once a day, inside `check`) |
 
 ## Ask (chat)
 

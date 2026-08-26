@@ -182,6 +182,9 @@ def announce(conn, cfg: dict, events: list[dict]) -> None:
 def run(cfg: dict | None = None) -> list[dict]:
     cfg = cfg or config.load()
     print(f"[{datetime.now():%Y-%m-%d %H:%M}] Checking wishlist prices...")
+    backed_up = db.backup()
+    if backed_up:
+        print(f"  Backed up database -> {backed_up.name}")
     with db.connect() as conn:
         appids = sync_wishlist(conn, cfg)
         if not appids:

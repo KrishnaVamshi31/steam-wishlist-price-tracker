@@ -6,6 +6,7 @@
   python track.py list       print the wishlist and prices to the terminal
   python track.py test       verify Telegram + toast notifications work
   python track.py note       record a piece of sale intel (used by the research task)
+  python track.py backup     snapshot data/prices.db to data/backups/
 """
 import argparse
 import sys
@@ -205,6 +206,16 @@ def cmd_note(args):
     print("Note recorded.")
 
 
+def cmd_backup(args):
+    path = db.backup()
+    if path:
+        print(f"Backed up to {path}")
+    elif not config.DB_PATH.exists():
+        print("Nothing to back up yet — run: python track.py check")
+    else:
+        print("Already backed up today.")
+
+
 def cmd_whoami(args):
     cfg = config.load()
     sid = steam.resolve_steamid(cfg["steam_profile"])
@@ -224,6 +235,7 @@ def main():
     sub.add_parser("digest", help="Telegram the current deal list").set_defaults(fn=cmd_digest)
     sub.add_parser("test", help="test notification channels").set_defaults(fn=cmd_test)
     sub.add_parser("whoami", help="check Steam profile + wishlist visibility").set_defaults(fn=cmd_whoami)
+    sub.add_parser("backup", help="snapshot the database to data/backups/").set_defaults(fn=cmd_backup)
 
     a = sub.add_parser("advise", help="buy-now-or-wait verdicts")
     a.add_argument("--telegram", action="store_true", help="also send verdicts to Telegram")
