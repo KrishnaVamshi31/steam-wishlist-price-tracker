@@ -21,6 +21,22 @@ STARTERS = [
 
 st.title("Ask about your wishlist")
 
+# On a public host, every message spends the deployer's Anthropic credits, so chat
+# stays off unless it is explicitly switched on with the ENABLE_PUBLIC_CHAT secret.
+# Locally it just works.
+if config.is_read_only() and config.secret("ENABLE_PUBLIC_CHAT").lower() not in (
+    "1",
+    "true",
+    "yes",
+):
+    st.info(
+        "Chat is disabled on the hosted copy — it would bill the API key of whoever "
+        "deployed it to anyone who opens this page. Run the app locally to use it, "
+        "or set `ENABLE_PUBLIC_CHAT = \"true\"` in the app's secrets to turn it on.",
+        icon=":material/lock:",
+    )
+    st.stop()
+
 if not brain.configured():
     st.warning(
         "Chat needs an Anthropic API key. Add one in **Settings → Connections**.",
