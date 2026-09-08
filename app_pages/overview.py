@@ -7,7 +7,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from tracker import config, db, insight, salecalendar
+from tracker import config, db, insight, live, salecalendar
 
 CFG = config.load()
 SYM = CFG.get("currency_symbol", "₹")
@@ -96,6 +96,53 @@ def sale_windows():
         ][:4]
 
 
+# ------------------------------------------------------------------ live lookup
+@st.cache_data(ttl=600, show_spinner=False)
+def load_live_games(profile: str, country: str):
+    """A visitor's wishlist, fetched from Steam. Cached so a reload is not a refetch."""
+    steamid, items = live.load_wishlist(profile, country)
+    rows = []
+    with db.connect() as conn:
+        for game in items:
+            # "Lowest seen" is per-game, not per-user, so any history this instance
+            # recorded applies to a visitor looking at the same game.
+            low = conn.execute(
+                "SELECT MIN(final) AS low FROM price_history WHERE appid=?", (game.appid,)
+            ).fetchone()["low"]
+            rows.append(
+                {
+                    "appid": game.appid, "name": game.name, "publishers": game.publishers,
+                    "release_date": game.release_date, "coming_soon": int(game.coming_soon),
+                    "final": game.final, "initial": game.initial,
+                    "discount_percent": game.discount_percent, "low": low,
+                }
+            )
+    return steamid, rows
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def load_live_verdicts(profile: str, country: str):
+    _, rows = load_live_games(profile, country)
+    games = [
+        live.LiveGame(
+            appid=r["appid"], name=r["name"], final=r["final"], initial=r["initial"],
+            discount_percent=r["discount_percent"], release_date=r["release_date"],
+            coming_soon=bool(r["coming_soon"]),
+        )
+        for r in rows
+    ]
+    with db.connect() as conn:
+        verdicts = insight.advise_live(conn, CFG, games)
+    return [
+        {
+            "appid": v.appid, "name": v.name, "action": v.action,
+            "confidence": v.confidence, "headline": v.headline, "price": v.current_price,
+            "cut": v.current_cut, "savings": v.expected_savings, "reasons": list(v.reasons),
+        }
+        for v in verdicts
+    ]
+
+
 # ------------------------------------------------------------------ sidebar
 READ_ONLY = config.is_read_only()
 
@@ -105,6 +152,7 @@ with st.sidebar:
         # next restart, and the page is public — anyone could trigger Steam calls.
         # The daily GitHub Actions run is what actually updates the data.
         st.caption("Updated daily by GitHub Actions.")
+        st.caption(f"Last check: {meta()['last_run'][:16].replace('T', ' ')}")
     elif st.button(
         "Check prices now", icon=":material/refresh:", type="primary", width="stretch"
     ):
@@ -121,21 +169,55 @@ with st.sidebar:
             )
         st.cache_data.clear()
 
-    st.caption(f"Last check: {meta()['last_run'][:16].replace('T', ' ')}")
+    st.divider()
+    st.markdown("**Your own wishlist**")
+    st.caption("Paste a Steam profile to see its prices and verdicts instead.")
+    typed = st.text_input(
+        "Steam profile",
+        value=st.session_state.get("viewer_profile", ""),
+        placeholder="steamcommunity.com/id/yourname",
+        label_visibility="collapsed",
+    )
+    look_up, clear = st.columns([2, 1])
+    with look_up:
+        if st.button("Look up", icon=":material/search:", width="stretch", type="primary"):
+            st.session_state.viewer_profile = typed.strip()
+            st.rerun()
+    with clear:
+        if st.button("Reset", width="stretch"):
+            st.session_state.pop("viewer_profile", None)
+            st.rerun()
+
+    st.divider()
     search = st.text_input("Search", placeholder="Filter games", icon=":material/search:")
     only_sale = st.toggle("Only discounted", value=False)
 
 
-games = load_games()
+# ------------------------------------------------------------------ data source
+VIEWER = (st.session_state.get("viewer_profile") or "").strip()
+steamid = None
+
+if VIEWER:
+    try:
+        with st.spinner("Reading that wishlist from Steam..."):
+            steamid, rows = load_live_games(VIEWER, CFG.get("country_code", "in"))
+            verdicts = load_live_verdicts(VIEWER, CFG.get("country_code", "in"))
+        games = pd.DataFrame(rows)
+    except live.LiveError as exc:
+        st.title("Wishlist price tracker")
+        st.error(str(exc), icon=":material/error:")
+        st.caption("Use the Reset button in the sidebar to go back.")
+        st.stop()
+else:
+    games = load_games()
+    verdicts = load_verdicts()
 
 if games.empty:
     st.title("Wishlist price tracker")
     st.info(
-        "No games tracked yet. Head to **Settings**, paste your Steam profile, "
-        "and hit Verify.",
+        "No games tracked yet. Paste a Steam profile in the sidebar to look one up.",
         icon=":material/rocket_launch:",
     )
-    st.page_link("app_pages/settings.py", label="Open settings", icon=":material/settings:")
     st.stop()
 
 games["discount_percent"] = games["discount_percent"].fillna(0).astype(int)
@@ -145,11 +227,17 @@ on_sale = games[games["discount_percent"] > 0]
 total_now = games["final"].fillna(0).sum()
 total_full = games["initial"].fillna(games["final"]).fillna(0).sum()
 saving = total_full - total_now
-verdicts = load_verdicts()
 buy_now = [v for v in verdicts if v["action"] == "BUY_NOW"]
 buy_now_cost = sum(v["price"] or 0 for v in buy_now)
 
 st.title("Wishlist price tracker")
+
+if VIEWER:
+    st.caption(
+        f"Live prices for [{steamid}](https://steamcommunity.com/profiles/{steamid}/) "
+        f"— {len(games)} games, fetched just now. Nothing is stored; close the tab and "
+        "it is gone. Use **Reset** in the sidebar to go back to the tracked wishlist."
+    )
 
 upcoming = sale_windows()
 if upcoming:

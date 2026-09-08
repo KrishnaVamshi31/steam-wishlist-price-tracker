@@ -7,6 +7,10 @@ for upcoming Steam sales and publisher discounts so you know whether to buy now 
 
 **Live dashboard: https://steamwishlisttracker.streamlit.app** — read-only, refreshed daily by GitHub Actions. See [DEPLOY.md](DEPLOY.md).
 
+Anyone can paste their own Steam profile into the sidebar and get live prices,
+discounts and buy-or-wait verdicts for their wishlist. Nothing is stored — the
+lookup lives in the browser session and is gone when the tab closes.
+
 ## Setup
 
 **1. Install dependencies**

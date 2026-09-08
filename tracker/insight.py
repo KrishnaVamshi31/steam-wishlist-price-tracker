@@ -171,3 +171,51 @@ def advise_all(conn, cfg: dict, use_itad: bool = True, verbose: bool = False):
 
     order = {"BUY_NOW": 0, "WAIT": 1, "NEUTRAL": 2, "UNKNOWN": 3}
     return sorted(verdicts, key=lambda v: (order[v.action], -v.expected_savings, v.name))
+
+
+def advise_live(conn, cfg: dict, games) -> list:
+    """Run the cadence model over a visitor's live wishlist.
+
+    Price history is per-GAME, not per-user, so any history this instance has
+    recorded (or imported from IsThereAnyDeal) applies to a visitor's copy of the
+    same game. Games nobody here has tracked simply have no history, and the model
+    says so rather than guessing.
+    """
+    symbol = cfg.get("currency_symbol", "₹")
+    today = date.today()
+    windows = salecalendar.load(conn)
+
+    verdicts = []
+    for game in games:
+        if game.final is None:
+            continue
+        current = PricePoint(
+            ts=today,
+            price=game.final,
+            regular=game.initial or game.final,
+            cut=game.discount_percent or 0,
+        )
+        release = None
+        if game.release_date:
+            for fmt in ("%d %b, %Y", "%b %d, %Y", "%d %B, %Y", "%Y-%m-%d"):
+                try:
+                    release = datetime.strptime(game.release_date.strip(), fmt).date()
+                    break
+                except ValueError:
+                    continue
+        verdicts.append(
+            advisor.analyse(
+                merged_history(conn, game.appid),
+                current,
+                today=today,
+                windows=windows,
+                release=release,
+                name=game.name,
+                unreleased=bool(game.coming_soon),
+                appid=game.appid,
+                symbol=symbol,
+            )
+        )
+
+    order = {"BUY_NOW": 0, "WAIT": 1, "NEUTRAL": 2, "UNKNOWN": 3}
+    return sorted(verdicts, key=lambda v: (order[v.action], -v.expected_savings, v.name))
