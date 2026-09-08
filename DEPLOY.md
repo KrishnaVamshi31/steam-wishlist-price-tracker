@@ -1,15 +1,11 @@
 # Deploying the dashboard
 
-The app is prepared for hosting. What remains needs your Streamlit and GitHub
-sign-in, so it has to be done by you — four clicks and a paste.
+**Live at https://steamwishlisttracker.streamlit.app** — deployed from `main`,
+Python 3.12, redeploys automatically on every push.
 
-## 1. Merge the prep branch
+The steps below are kept for reference, or for redeploying elsewhere.
 
-https://github.com/KrishnaVamshi31/steam-wishlist-price-tracker/pull/1
-
-Or deploy straight from the `deploy-ready` branch and merge later.
-
-## 2. Deploy
+## Deploy
 
 1. Go to https://share.streamlit.io and sign in with GitHub.
 2. **Create app** → **Deploy a public app from GitHub**.
@@ -23,7 +19,7 @@ Or deploy straight from the `deploy-ready` branch and merge later.
 
 First build takes a couple of minutes while it installs requirements.
 
-## 3. Secrets (all optional)
+## Secrets (all optional)
 
 In **Advanced settings → Secrets**, in TOML format:
 

@@ -5,6 +5,8 @@ price history, and alerts you — via Telegram, Windows notification, and a loca
 dashboard — when something drops. A daily Claude task additionally searches the web
 for upcoming Steam sales and publisher discounts so you know whether to buy now or wait.
 
+**Live dashboard: https://steamwishlisttracker.streamlit.app** — read-only, refreshed daily by GitHub Actions. See [DEPLOY.md](DEPLOY.md).
+
 ## Setup
 
 **1. Install dependencies**
