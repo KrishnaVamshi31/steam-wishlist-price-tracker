@@ -97,8 +97,17 @@ def sale_windows():
 
 
 # ------------------------------------------------------------------ sidebar
+READ_ONLY = config.is_read_only()
+
 with st.sidebar:
-    if st.button("Check prices now", icon=":material/refresh:", type="primary", width="stretch"):
+    if READ_ONLY:
+        # Hosted: a fetch here would write to a database that is thrown away on the
+        # next restart, and the page is public — anyone could trigger Steam calls.
+        # The daily GitHub Actions run is what actually updates the data.
+        st.caption("Updated daily by GitHub Actions.")
+    elif st.button(
+        "Check prices now", icon=":material/refresh:", type="primary", width="stretch"
+    ):
         with st.status("Fetching from Steam...", expanded=True) as status:
             proc = subprocess.run(
                 [sys.executable, "track.py", "check"],

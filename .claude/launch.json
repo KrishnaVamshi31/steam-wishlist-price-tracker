@@ -2,8 +2,14 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "dashboard",
-      "runtimeExecutable": "C:/Users/vamshi/Documents/GamePriceTracker/.venv/Scripts/python.exe",
+      "name": "cloudsim",
+      "runtimeExecutable": "C:/Users/vamshi/Documents/Steam Price tracker/.venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "streamlit", "run", "streamlit_app.py", "--server.port", "8502", "--server.headless", "true"],
+      "port": 8502
+    },
+    {
+      "name": "local",
+      "runtimeExecutable": "C:/Users/vamshi/Documents/Steam Price tracker/.venv/Scripts/python.exe",
       "runtimeArgs": ["-m", "streamlit", "run", "streamlit_app.py", "--server.port", "8501", "--server.headless", "true"],
       "port": 8501
     }

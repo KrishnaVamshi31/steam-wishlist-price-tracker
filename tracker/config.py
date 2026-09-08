@@ -1,6 +1,7 @@
 """Configuration: config.json for settings, .env for secrets."""
 import json
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -55,7 +56,42 @@ def save(cfg: dict) -> None:
 
 
 def secret(name: str, default: str = "") -> str:
-    return (os.environ.get(name) or default).strip()
+    """Read a secret from the environment, falling back to Streamlit secrets.
+
+    Locally that means .env; on Streamlit Community Cloud there is no .env, and
+    keys come from the app's secrets instead. Only consult st.secrets when
+    Streamlit is actually running — importing it for a CLI run would be slow and
+    pointless.
+    """
+    value = os.environ.get(name)
+    if not value and "streamlit" in sys.modules:
+        try:
+            import streamlit as st
+
+            value = st.secrets.get(name)
+        except Exception:
+            # No secrets file configured, or Streamlit not in a script context.
+            value = None
+    return (str(value) if value else default).strip()
+
+
+def is_read_only() -> bool:
+    """True when running somewhere with a throwaway filesystem.
+
+    Streamlit Community Cloud re-clones the repo on every restart, so anything
+    written at runtime — config.json, .env, prices.db — disappears without
+    warning. A settings form that silently loses your input is worse than one
+    that plainly says it is read-only, so the UI checks this.
+
+    Set APP_READ_ONLY=0 to force writes back on, or =1 to simulate the cloud.
+    """
+    override = os.environ.get("APP_READ_ONLY", "").strip().lower()
+    if override in ("1", "true", "yes"):
+        return True
+    if override in ("0", "false", "no"):
+        return False
+    # Streamlit Community Cloud checks the repo out under /mount/src.
+    return Path("/mount/src").exists() or str(ROOT).startswith("/mount/src")
 
 
 ENV_PATH = ROOT / ".env"

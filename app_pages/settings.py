@@ -32,6 +32,53 @@ def _run(*args: str) -> tuple[int, str]:
 
 
 st.title("Settings")
+
+if config.is_read_only():
+    # Hosted: the filesystem is re-created from git on every restart, so any save
+    # here would look like it worked and then silently vanish. Show the live
+    # configuration instead, and point edits at the places that actually persist.
+    st.info(
+        "This is the hosted, read-only copy. Settings live in the repository and "
+        "are applied by the daily GitHub Actions run — edit them there, not here.",
+        icon=":material/cloud:",
+    )
+
+    with st.container(border=True):
+        st.subheader(":material/tune: Current configuration")
+        profile = CFG.get("steam_profile", "")
+        region = next(
+            (n for n, (c, _) in REGIONS.items() if c == CFG.get("country_code")),
+            CFG.get("country_code", "—"),
+        )
+        with st.container(horizontal=True):
+            st.metric("Region", region, border=True)
+            st.metric("Alert threshold", f"{CFG.get('min_discount_percent', 20)}% off", border=True)
+            st.metric("Price targets set", len(CFG.get("target_prices", {}) or {}), border=True)
+        st.caption(f"Steam profile: {profile or 'not set'}")
+
+    with st.container(border=True):
+        st.subheader(":material/key: Connections")
+        st.caption("Configured through this app's secrets, never committed to the repo.")
+        for label, ok, why in [
+            ("Claude (chat)", chat.configured(), "powers the Ask page"),
+            ("IsThereAnyDeal", itad.configured(), "real multi-year price history"),
+            ("Telegram", notify.telegram_configured(), "price-drop alerts"),
+        ]:
+            st.markdown(
+                f"{':green-badge[connected]' if ok else ':gray-badge[not set]'} "
+                f"**{label}** — {why}"
+            )
+
+    with st.container(border=True):
+        st.subheader(":material/edit: How to change these")
+        st.markdown(
+            "- **Thresholds, targets, region** — edit `config.json` in the repo and push.\n"
+            "- **API keys and tokens** — set them as this app's secrets, and as "
+            "repository secrets for the daily workflow.\n"
+            "- **Steam profile** — `steam_profile` in `config.json`."
+        )
+    st.stop()
+
 st.caption("Everything here writes to `config.json` or `.env` in the project folder.")
 
 # ------------------------------------------------------------------ account
